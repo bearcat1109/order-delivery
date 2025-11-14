@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Delivery System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .section {
+            display: none;
+            margin-top: 20px;
+        }
+        .section.active {
+            display: block;
+        }
+        nav button {
+            margin-right: 10px;
+            padding: 10px;
+        }
+        input, select, textarea {
+            display: block;
+            margin: 10px 0;
+            padding: 5px;
+            width: 300px;
+        }
+        button {
+            padding: 8px 15px;
+            margin: 5px;
+        }
+        .order {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Order Delivery System</h1>
+    
+    <nav>
+        <button onclick="showSection('business')">Business</button>
+        <button onclick="showSection('driver')">Driver</button>
+        <button onclick="showSection('company')">Company</button>
+        <button onclick="showSection('setup')">Setup</button>
+    </nav>
+
+    <!-- Businesses div -->
+    <div id="business" class="section active">
+        <h2>Business Portal</h2>
+        <select id="businessSelect" onchange="loadBusinessOrders()">
+            <option value="">Select Business...</option>
+        </select>
+
+        <h3>Create Order</h3>
+        <form id="orderForm">
+            <input type="text" id="customerStreet" placeholder="Street" required>
+            <input type="text" id="customerCity" placeholder="City" required>
+            <input type="text" id="customerState" placeholder="State" required>
+            <input type="text" id="customerZipCode" placeholder="Zip Code" required>
+            <textarea id="orderItems" placeholder="Order Items"></textarea>
+            <button type="submit">Create Order</button>
+        </form>
+
+        <h3>Orders</h3>
+        <div id="businessOrders"></div>
+    </div>
+
+    <!-- Driver div-->
+    <div id="driver" class="section">
+        <h2>Driver Portal</h2>
+        <select id="driverSelect" onchange="loadDriverOrders()">
+            <option value="">Select Driver...</option>
+        </select>
+
+        <h3>Assigned Orders</h3>
+        <div id="driverOrders"></div>
+    </div>
+
+    <!-- Setup div -->
+    <div id="setup" class="section">
+        <h2>System Setup</h2>
+        
+        <h3>Add Business</h3>
+        <form id="businessForm">
+            <input type="text" id="businessName" placeholder="Business Name" required>
+            <input type="email" id="businessEmail" placeholder="Email" required>
+            <input type="text" id="businessPhone" placeholder="Phone">
+            <button type="submit">Add Business</button>
+        </form>
+
+        <h3>Add Driver</h3>
+        <form id="driverForm">
+            <input type="text" id="driverName" placeholder="Driver Name" required>
+            <input type="text" id="driverContact" placeholder="Contact Info">
+            <button type="submit">Add Driver</button>
+        </form>
+
+        <h3>Add Zip Code</h3>
+        <form id="zipCodeForm">
+            <input type="text" id="zipCode" placeholder="Zip Code" required>
+            <input type="number" id="minDeliveryTime" placeholder="Min Time (minutes)" required>
+            <input type="number" id="maxDeliveryTime" placeholder="Max Time (minutes)" required>
+            <input type="number" id="expectedDeliveryTime" placeholder="Expected Time (minutes)" required>
+            <button type="submit">Add Zip Code</button>
+        </form>
+    </div>
+
+    <!-- Company div -->
+    <div id="company" class="section">
+        <h2>Company Administration</h2>
+        <h3>All Orders</h3>
+        <button onclick="loadAllOrders()">Refresh</button>
+        <div id="allOrders"></div>
+    </div>
+
+    <!-- Script. This handles the interaction with the node api -->
+    <script>
+        const API = 'http://localhost:3000/api';
+
+        function showSection(section) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.getElementById(section).classList.add('active');
+            
+            if (section === 'business') loadBusinesses();
+            if (section === 'driver') loadDrivers();
+            if (section === 'company') loadAllOrders();
+        }
+
+        async function loadBusinesses() {
+            const res = await fetch(`${API}/businesses`);
+            const data = await res.json();
+            document.getElementById('businessSelect').innerHTML = 
+                '<option value="">Select Business...</option>' +
+                data.map(b => `<option value="${b._id}">${b.businessName}</option>`).join('');
+        }
+
+        async function loadDrivers() {
+            const res = await fetch(`${API}/drivers`);
+            const data = await res.json();
+            document.getElementById('driverSelect').innerHTML = 
+                '<option value="">Select Driver...</option>' +
+                data.map(d => `<option value="${d._id}">${d.driverName}</option>`).join('');
+        }
+
+        async function loadBusinessOrders() {
+            const businessId = document.getElementById('businessSelect').value;
+            if (!businessId) return;
+            
+            const res = await fetch(`${API}/orders?businessId=${businessId}`);
+            const orders = await res.json();
+            displayOrders('businessOrders', orders, true);
+        }
+
+        async function loadDriverOrders() {
+            const driverId = document.getElementById('driverSelect').value;
+            if (!driverId) return;
+            
+            const res = await fetch(`${API}/orders?driverId=${driverId}`);
+            const orders = await res.json();
+            displayDriverOrders(orders);
+        }
+
+        async function loadAllOrders() {
+            const res = await fetch(`${API}/orders`);
+            const orders = await res.json();
+            displayCompanyOrders(orders);
+        }
+
+        function displayOrders(containerId, orders, showActions) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = orders.map(o => `
+                <div class="order">
+                    <strong>Order ID:</strong> ${o._id}<br>
+                    <strong>Status:</strong> ${o.orderStatus}<br>
+                    <strong>Address:</strong> ${o.customerStreet}, ${o.customerCity}, ${o.customerState} ${o.customerZipCode}<br>
+                    <strong>Items:</strong> ${o.orderItems}<br>
+                    <strong>Expected:</strong> ${new Date(o.expectedDeliveryTime).toLocaleString()}<br>
+                    ${showActions && o.orderStatus === 'received' ? `
+                        <button onclick="updateOrder('${o._id}')">Update</button>
+                        ${!o.assignedDriverId ? `<button onclick="cancelOrder('${o._id}')">Cancel</button>` : ''}
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        function displayDriverOrders(orders) {
+            const container = document.getElementById('driverOrders');
+            container.innerHTML = orders.map(o => `
+                <div class="order">
+                    <strong>Order ID:</strong> ${o._id}<br>
+                    <strong>Status:</strong> ${o.orderStatus}<br>
+                    <strong>Address:</strong> ${o.customerStreet}, ${o.customerCity}, ${o.customerState} ${o.customerZipCode}<br>
+                    <strong>Items:</strong> ${o.orderItems}<br>
+                    ${o.orderStatus !== 'delivered' ? `
+                        <select onchange="updateStatus('${o._id}', this.value)">
+                            <option value="">Update Status...</option>
+                            ${o.orderStatus === 'assigned' ? '<option value="picked_up">Picked Up</option>' : ''}
+                            ${o.orderStatus === 'picked_up' ? '<option value="out_for_delivery">Out for Delivery</option>' : ''}
+                            ${o.orderStatus === 'out_for_delivery' ? '<option value="delivered">Delivered</option>' : ''}
+                        </select>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        function displayCompanyOrders(orders) {
+            const container = document.getElementById('allOrders');
+            container.innerHTML = orders.map(o => `
+                <div class="order">
+                    <strong>Order ID:</strong> ${o._id}<br>
+                    <strong>Business:</strong> ${o.businessId?.businessName || 'N/A'}<br>
+                    <strong>Status:</strong> ${o.orderStatus}<br>
+                    <strong>Address:</strong> ${o.customerStreet}, ${o.customerCity}, ${o.customerState} ${o.customerZipCode}<br>
+                    <strong>Driver:</strong> ${o.assignedDriverId?.driverName || 'Unassigned'}<br>
+                    ${o.orderStatus === 'received' && !o.assignedDriverId ? `
+                        <button onclick="assignDriver('${o._id}', false)">Manual Assign</button>
+                        <button onclick="assignDriver('${o._id}', true)">Auto Assign</button>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        document.getElementById('orderForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const businessId = document.getElementById('businessSelect').value;
+            if (!businessId) return alert('Select a business');
+
+            await fetch(`${API}/orders`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    businessId,
+                    customerStreet: document.getElementById('customerStreet').value,
+                    customerCity: document.getElementById('customerCity').value,
+                    customerState: document.getElementById('customerState').value,
+                    customerZipCode: document.getElementById('customerZipCode').value,
+                    orderItems: document.getElementById('orderItems').value
+                })
+            });
+            e.target.reset();
+            loadBusinessOrders();
+        };
+
+        async function updateOrder(orderId) {
+            const items = prompt('Enter new items:');
+            if (!items) return;
+            
+            await fetch(`${API}/orders/${orderId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderItems: items })
+            });
+            loadBusinessOrders();
+        }
+
+        async function cancelOrder(orderId) {
+            if (!confirm('Cancel order?')) return;
+            await fetch(`${API}/orders/${orderId}`, { method: 'DELETE' });
+            loadBusinessOrders();
+        }
+
+        async function updateStatus(orderId, status) {
+            if (!status) return;
+            await fetch(`${API}/orders/${orderId}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status })
+            });
+            loadDriverOrders();
+        }
+
+        async function assignDriver(orderId, auto) {
+            const body = auto ? { autoAssign: true } : { driverId: prompt('Enter driver ID:') };
+            await fetch(`${API}/orders/${orderId}/assign`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            loadAllOrders();
+        }
+
+        document.getElementById('businessForm').onsubmit = async (e) => {
+            e.preventDefault();
+            await fetch(`${API}/businesses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    businessName: document.getElementById('businessName').value,
+                    businessEmail: document.getElementById('businessEmail').value,
+                    businessPhone: document.getElementById('businessPhone').value
+                })
+            });
+            e.target.reset();
+            alert('Business added');
+        };
+
+        document.getElementById('driverForm').onsubmit = async (e) => {
+            e.preventDefault();
+            await fetch(`${API}/drivers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    driverName: document.getElementById('driverName').value,
+                    contactInfo: document.getElementById('driverContact').value
+                })
+            });
+            e.target.reset();
+            alert('Driver added');
+        };
+
+        document.getElementById('zipCodeForm').onsubmit = async (e) => {
+            e.preventDefault();
+            await fetch(`${API}/zipcodes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    zipCode: document.getElementById('zipCode').value,
+                    minDeliveryTime: document.getElementById('minDeliveryTime').value,
+                    maxDeliveryTime: document.getElementById('maxDeliveryTime').value,
+                    expectedDeliveryTime: document.getElementById('expectedDeliveryTime').value
+                })
+            });
+            e.target.reset();
+            alert('Zip code added');
+        };
+
+        loadBusinesses();
+    </script>
+</body>
+</html>
